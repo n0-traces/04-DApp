@@ -1,0 +1,144 @@
+%% EVM 执行流程图
+graph TD
+    Start([交易进入EVM]) --> Init[1. 初始化EVM环境]
+
+    Init --> InitSteps[创建BlockContext<br/>创建TxContext<br/>实例化StateDB]
+
+    InitSteps --> PrepareContract[2. 准备执行环境]
+
+    PrepareContract --> ContractType{交易类型}
+
+    ContractType -->|转账| Transfer[简单转账<br/>更新余额]
+    ContractType -->|合约调用| Call[EVM.Call]
+    ContractType -->|合约创建| Create[EVM.Create]
+
+    Call --> CreateContract[创建Contract对象]
+    Create --> CreateContract
+
+    CreateContract --> ContractDetails[Contract包含:<br/>Code 字节码<br/>Input 输入数据<br/>Gas 可用Gas<br/>Address 合约地址<br/>Caller 调用者]
+
+    ContractDetails --> AllocateGas[3. 分配Gas]
+
+    AllocateGas --> GasCalc[从账户扣除<br/>gasLimit * gasPrice]
+
+    GasCalc --> Interpreter[4. 字节码解释器循环]
+
+    Interpreter --> ReadOpcode[读取操作码<br/>opcode byte]
+
+    ReadOpcode --> CheckGas{检查Gas}
+    CheckGas -->|不足| OutOfGas[抛出OutOfGas异常]
+    CheckGas -->|充足| DeductGas[扣除操作Gas]
+
+    DeductGas --> ExecuteOp[执行操作]
+
+    ExecuteOp --> OpType{操作码类型}
+
+    OpType -->|栈操作 0x50-0x5f| StackOp[PUSH, POP, DUP, SWAP]
+    OpType -->|内存操作 0x51-0x53| MemoryOp[MLOAD, MSTORE, MSTORE8]
+    OpType -->|存储操作 0x54-0x55| StorageOp[SLOAD, SSTORE]
+    OpType -->|控制流 0x56-0x5b| ControlOp[JUMP, JUMPI, PC, JUMPDEST]
+    OpType -->|环境信息 0x30-0x3f| EnvOp[ADDRESS, BALANCE, CALLER]
+    OpType -->|区块信息 0x40-0x48| BlockOp[BLOCKHASH, COINBASE, TIMESTAMP]
+    OpType -->|调用操作 0xf0-0xff| CallOp[CALL, DELEGATECALL, CREATE]
+    OpType -->|哈希 0x20| SHA3Op[SHA3/KECCAK256]
+    OpType -->|日志 0xa0-0xa4| LogOp[LOG0-LOG4]
+    OpType -->|终止 0x00| StopOp[STOP]
+    OpType -->|返回 0xf3| ReturnOp[RETURN]
+    OpType -->|回滚 0xfd| RevertOp[REVERT]
+    OpType -->|自毁 0xff| SelfDestructOp[SELFDESTRUCT]
+
+    StackOp --> Stack[操作Stack<br/>最大1024项]
+    Stack --> UpdateGas1[更新Gas计数器]
+
+    MemoryOp --> Memory[操作Memory<br/>动态扩展]
+    Memory --> MemGasCost[计算内存扩展Gas]
+    MemGasCost --> UpdateGas2[更新Gas计数器]
+
+    StorageOp --> CheckAccess{访问类型}
+    CheckAccess -->|冷访问| ColdGas[2100 Gas EIP-2929]
+    CheckAccess -->|热访问| WarmGas[100 Gas]
+    ColdGas --> Storage[StateDB Storage]
+    WarmGas --> Storage
+    Storage --> StorageRefund[SSTORE退款 EIP-2200]
+    StorageRefund --> UpdateGas3[更新Gas计数器]
+
+    ControlOp --> ValidateJump{验证JUMPDEST}
+    ValidateJump -->|无效| InvalidJump[抛出异常]
+    ValidateJump -->|有效| UpdatePC[更新程序计数器]
+    UpdatePC --> UpdateGas4[更新Gas计数器]
+
+    EnvOp --> ReadContext[读取TxContext]
+    ReadContext --> UpdateGas5[更新Gas计数器]
+
+    BlockOp --> ReadBlock[读取BlockContext]
+    ReadBlock --> UpdateGas6[更新Gas计数器]
+
+    CallOp --> CheckDepth{调用深度}
+    CheckDepth -->|大于1024| DepthError[抛出深度异常]
+    CheckDepth -->|小于等于1024| SubCall[递归调用EVM]
+    SubCall --> ReturnData[返回数据]
+    ReturnData --> UpdateGas7[更新Gas计数器]
+
+    SHA3Op --> UpdateGas8[更新Gas计数器]
+
+    LogOp --> EmitLog[写入Receipt.Logs]
+    EmitLog --> UpdateGas9[更新Gas计数器]
+
+    StopOp --> UpdateGas10[更新Gas计数器]
+    ReturnOp --> UpdateGas11[更新Gas计数器]
+    RevertOp --> UpdateGas12[更新Gas计数器]
+    SelfDestructOp --> UpdateGas13[更新Gas计数器]
+
+    UpdateGas1 --> CheckTerminate
+    UpdateGas2 --> CheckTerminate
+    UpdateGas3 --> CheckTerminate
+    UpdateGas4 --> CheckTerminate
+    UpdateGas5 --> CheckTerminate
+    UpdateGas6 --> CheckTerminate
+    UpdateGas7 --> CheckTerminate
+    UpdateGas8 --> CheckTerminate
+    UpdateGas9 --> CheckTerminate
+    UpdateGas10 --> CheckTerminate
+    UpdateGas11 --> CheckTerminate
+    UpdateGas12 --> CheckTerminate
+    UpdateGas13 --> CheckTerminate
+
+    CheckTerminate{终止条件}
+
+    CheckTerminate -->|STOP/RETURN| NormalEnd[正常结束]
+    CheckTerminate -->|REVERT| RevertEnd[回滚结束]
+    CheckTerminate -->|异常| ErrorEnd[异常结束]
+    CheckTerminate -->|继续| ReadOpcode
+
+    NormalEnd --> Finalize[5. 状态提交]
+    RevertEnd --> Rollback[回滚状态]
+    ErrorEnd --> Rollback
+    OutOfGas --> Rollback
+    InvalidJump --> Rollback
+    DepthError --> Rollback
+
+    Finalize --> FinalSteps[1. 更新StateDB<br/>2. Gas退款<br/>3. 矿工费<br/>4. 生成Receipt]
+
+    Rollback --> RollbackSteps[1. 回滚状态<br/>2. 仍消耗Gas<br/>3. Receipt.Status=0]
+
+    FinalSteps --> Result[6. 返回结果]
+    RollbackSteps --> Result
+
+    Transfer --> SimpleTransfer[更新余额<br/>无需解释器]
+    SimpleTransfer --> Result
+
+    Result --> End([执行完成])
+
+    classDef initStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef execStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef opStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef storageStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef errorStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef finalStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+
+    class Start,Init,InitSteps,PrepareContract,ContractType,CreateContract,ContractDetails initStyle
+    class AllocateGas,GasCalc,Interpreter,ReadOpcode,CheckGas,DeductGas,ExecuteOp,OpType execStyle
+    class StackOp,Stack,MemoryOp,Memory,MemGasCost,StorageOp,Storage,StorageRefund,ControlOp,EnvOp,BlockOp,CallOp,ReturnData,SHA3Op,LogOp,EmitLog,StopOp,ReturnOp,RevertOp,SelfDestructOp opStyle
+    class CheckAccess,ColdGas,WarmGas storageStyle
+    class OutOfGas,InvalidJump,DepthError,ErrorEnd,Rollback,RollbackSteps errorStyle
+    class NormalEnd,Finalize,FinalSteps,Result,End,Transfer,SimpleTransfer,UpdateGas1,UpdateGas2,UpdateGas3,UpdateGas4,UpdateGas5,UpdateGas6,UpdateGas7,UpdateGas8,UpdateGas9,UpdateGas10,UpdateGas11,UpdateGas12,UpdateGas13,CheckTerminate finalStyle

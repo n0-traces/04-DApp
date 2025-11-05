@@ -1,0 +1,69 @@
+%% Snap Sync 协议流程图
+sequenceDiagram
+    participant User as 用户节点
+    participant Peer as Peer节点
+    participant DB as 本地数据库
+
+    Note over User,Peer: Snap Sync 启动
+
+    User->>Peer: 1. GetBlockHeaders<br/>请求区块头
+    Peer-->>User: BlockHeaders<br/>返回区块头
+
+    User->>DB: 验证并存储区块头
+
+    Note over User: 选择Pivot点<br/>(当前高度-1024)
+
+    par 并行下载账户快照
+        User->>Peer: 2. GetAccountRange<br/>请求账户范围 [0x00...0x10...]
+        Peer-->>User: AccountRange<br/>返回账户数据 + Merkle证明
+
+        User->>Peer: GetAccountRange<br/>请求账户范围 [0x10...0x20...]
+        Peer-->>User: AccountRange<br/>返回账户数据 + Merkle证明
+
+        User->>Peer: GetAccountRange<br/>请求账户范围 [0x20...0x30...]
+        Peer-->>User: AccountRange<br/>返回账户数据 + Merkle证明
+    end
+
+    User->>DB: 存储账户快照
+
+    par 并行下载存储快照
+        User->>Peer: 3. GetStorageRanges<br/>请求合约存储
+        Peer-->>User: StorageRanges<br/>返回存储数据 + 证明
+
+        User->>Peer: GetStorageRanges<br/>请求合约存储
+        Peer-->>User: StorageRanges<br/>返回存储数据 + 证明
+    end
+
+    User->>DB: 存储合约存储数据
+
+    User->>Peer: 4. GetByteCodes<br/>请求合约字节码
+    Peer-->>User: ByteCodes<br/>返回字节码
+
+    User->>DB: 存储字节码
+
+    Note over User: 后台修复Merkle树
+
+    User->>User: 5. 验证状态根<br/>计算Trie Root
+
+    alt 验证成功
+        User->>User: 状态同步完成
+        Note over User: 切换到Full Sync模式
+    else 验证失败
+        User->>User: 检测缺失数据
+        User->>Peer: 请求缺失的账户/存储
+        Peer-->>User: 补充缺失数据
+    end
+
+    par 并行下载最近区块
+        User->>Peer: GetBlockBodies<br/>请求Pivot后的区块体
+        Peer-->>User: BlockBodies<br/>返回交易和叔块
+
+        User->>Peer: GetReceipts<br/>请求收据
+        Peer-->>User: Receipts<br/>返回收据
+    end
+
+    User->>DB: 执行并存储区块
+
+    Note over User: Snap Sync 完成<br/>总耗时: 2-4小时
+
+    User->>User: 切换到Full Sync<br/>逐块执行新区块

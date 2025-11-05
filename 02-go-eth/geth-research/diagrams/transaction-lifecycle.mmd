@@ -1,0 +1,78 @@
+%% 交易生命周期流程图
+graph TD
+    Start([用户提交交易]) --> Submit[1. 提交<br/>签名交易]
+
+    Submit --> Broadcast[2. 广播<br/>JSON-RPC API<br/>P2P Network]
+
+    Broadcast --> Validate[3. 验证与分类<br/>TxPool]
+
+    Validate --> CheckSig{签名验证}
+    CheckSig -->|失败| Reject1[拒绝]
+    CheckSig -->|成功| CheckNonce{Nonce检查}
+
+    CheckNonce -->|无效| Reject2[拒绝]
+    CheckNonce -->|有效| CheckBalance{余额检查}
+
+    CheckBalance -->|不足| Reject3[拒绝]
+    CheckBalance -->|充足| Classify{分类}
+
+    Classify -->|Nonce连续| Pending[Pending队列<br/>可打包]
+    Classify -->|Nonce有空隙| Queue[Queue队列<br/>等待前置交易]
+
+    Queue -.->|前置交易确认| Pending
+
+    Pending --> Sort[4. 排序与选择<br/>Miner]
+    Sort --> SortDetail[按gasPrice降序<br/>同价格按nonce升序<br/>填充到gasLimit]
+
+    SortDetail --> Execute[5. 执行<br/>EVM]
+
+    Execute --> ExecSteps[执行步骤:<br/>1. 检查nonce<br/>2. 购买Gas<br/>3. 执行交易<br/>4. Gas退款<br/>5. 矿工费]
+
+    ExecSteps --> ExecResult{执行结果}
+
+    ExecResult -->|成功| Success[Status=1<br/>状态更新<br/>生成日志]
+    ExecResult -->|失败| Fail[Status=0<br/>回滚状态<br/>仍消耗Gas]
+
+    Success --> Pack[6. 打包进区块]
+    Fail --> Pack
+
+    Pack --> PackDetail[计算TxHash<br/>计算ReceiptHash<br/>更新StateRoot<br/>构造Header]
+
+    PackDetail --> Consensus[7. 共识验证]
+
+    Consensus --> ConsType{共识类型}
+    ConsType -->|PoW| Mining[Ethash挖矿<br/>寻找nonce]
+    ConsType -->|PoS| BeaconChain[Beacon Chain<br/>验证者签名]
+
+    Mining --> Insert[8. 区块插入<br/>BlockChain]
+    BeaconChain --> Insert
+
+    Insert --> InsertSteps[1. 验证区块头<br/>2. 执行所有交易<br/>3. 验证状态根<br/>4. 写入数据库<br/>5. 更新链头<br/>6. 触发事件]
+
+    InsertSteps --> BroadcastBlock[9. 广播区块<br/>P2P NewBlockMsg]
+
+    BroadcastBlock --> Cleanup[清理TxPool<br/>移除已确认交易]
+
+    Cleanup --> Confirm[10. 确认<br/>等待N个区块]
+
+    Confirm --> End([交易最终确认])
+
+    %% 链重组处理
+    Insert -.->|发生Reorg| Reorg[链重组处理]
+    Reorg -.-> ReorgSteps[回滚旧链交易<br/>重新加入TxPool]
+    ReorgSteps -.-> Pending
+
+    %% 样式
+    classDef submitStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef validateStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef executeStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef consensusStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef finalStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef rejectStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
+
+    class Start,Submit,Broadcast submitStyle
+    class Validate,CheckSig,CheckNonce,CheckBalance,Classify,Pending,Queue validateStyle
+    class Sort,SortDetail,Execute,ExecSteps,ExecResult,Success,Fail executeStyle
+    class Pack,PackDetail,Consensus,ConsType,Mining,BeaconChain consensusStyle
+    class Insert,InsertSteps,BroadcastBlock,Cleanup,Confirm,End finalStyle
+    class Reject1,Reject2,Reject3 rejectStyle

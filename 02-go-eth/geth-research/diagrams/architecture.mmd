@@ -1,0 +1,75 @@
+%% Geth 五层架构图
+graph TB
+    subgraph Application["应用接口层 (Application Layer)"]
+        CLI[geth CLI]
+        RPC[JSON-RPC Server]
+        GraphQL[GraphQL Server]
+        WS[WebSocket Server]
+    end
+
+    subgraph Protocol["区块链协议层 (Protocol Layer)"]
+        Downloader[Downloader<br/>区块同步]
+        Fetcher[Fetcher<br/>区块获取]
+        TxPool[TxPool<br/>交易池]
+        Handler[Protocol Handler<br/>eth/66, eth/67, snap/1]
+    end
+
+    subgraph Core["区块链核心层 (Core Layer)"]
+        BlockChain[BlockChain<br/>链管理]
+        StateDB[StateDB<br/>状态管理]
+        VM[EVM<br/>虚拟机]
+        Consensus[Consensus<br/>共识引擎]
+        Miner[Miner<br/>区块构建]
+    end
+
+    subgraph Storage["状态存储层 (Storage Layer)"]
+        Trie[MPT Trie<br/>默克尔树]
+        LevelDB[(LevelDB<br/>状态数据库)]
+        Ancient[(Ancient Store<br/>历史数据)]
+    end
+
+    subgraph Network["P2P网络层 (Network Layer)"]
+        DevP2P[DevP2P<br/>传输协议]
+        Kademlia[Kademlia DHT<br/>节点发现]
+        DiscV5[DiscV5<br/>发现协议]
+    end
+
+    %% 连接关系
+    CLI --> RPC
+    RPC --> Handler
+    GraphQL --> Handler
+    WS --> Handler
+
+    Handler --> Downloader
+    Handler --> Fetcher
+    Handler --> TxPool
+
+    Downloader --> BlockChain
+    Fetcher --> BlockChain
+    TxPool --> Miner
+
+    Miner --> VM
+    BlockChain --> StateDB
+    BlockChain --> Consensus
+    VM --> StateDB
+
+    StateDB --> Trie
+    Trie --> LevelDB
+    BlockChain --> Ancient
+
+    Handler --> DevP2P
+    DevP2P --> Kademlia
+    DevP2P --> DiscV5
+
+    %% 样式
+    classDef appLayer fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    classDef protocolLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef coreLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef storageLayer fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef networkLayer fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+
+    class CLI,RPC,GraphQL,WS appLayer
+    class Downloader,Fetcher,TxPool,Handler protocolLayer
+    class BlockChain,StateDB,VM,Consensus,Miner coreLayer
+    class Trie,LevelDB,Ancient storageLayer
+    class DevP2P,Kademlia,DiscV5 networkLayer

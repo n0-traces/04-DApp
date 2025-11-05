@@ -1,0 +1,69 @@
+%% World State 存储模型
+graph TD
+    subgraph WorldState["World State Tree (StateRoot in Block Header)"]
+        Root[(StateRoot<br/>Keccak256 Hash)]
+    end
+
+    Root --> Account1[Account 0x1234...]
+    Root --> Account2[Account 0xabcd...]
+    Root --> AccountN[Account 0x...]
+
+    subgraph Acc1["Account 1 (EOA)"]
+        Account1 --> Balance1[Balance: 10 ETH]
+        Account1 --> Nonce1[Nonce: 42]
+        Account1 --> CodeHash1[CodeHash: 0x00...<br/>空代码]
+        Account1 --> StorageRoot1[StorageRoot: 0x00...<br/>空存储]
+    end
+
+    subgraph Acc2["Account 2 (Contract)"]
+        Account2 --> Balance2[Balance: 5 ETH]
+        Account2 --> Nonce2[Nonce: 1]
+        Account2 --> CodeHash2[CodeHash: 0xc5a...]
+        Account2 --> StorageRoot2[StorageRoot: 0x...]
+    end
+
+    CodeHash2 --> Code[Contract Bytecode<br/>EVM Code]
+
+    StorageRoot2 --> StorageTrie[(Storage Trie<br/>Contract State)]
+
+    StorageTrie --> Slot0[Slot 0<br/>Value: 100]
+    StorageTrie --> Slot1[Slot 1<br/>Value: 200]
+    StorageTrie --> SlotN[Slot 0x9f...<br/>Value: 0x...]
+
+    subgraph Database["Database Layer"]
+        Root -.->|存储在| LevelDB[(LevelDB<br/>Key-Value Store)]
+        Code -.->|存储在| LevelDB
+        StorageTrie -.->|存储在| LevelDB
+    end
+
+    subgraph MPT["Merkle Patricia Trie Structure"]
+        MPTRoot[Trie Root] --> Branch[Branch Node<br/>16 children]
+        Branch --> Extension[Extension Node<br/>共享前缀]
+        Extension --> Leaf[Leaf Node<br/>Key-Value]
+        Branch --> Leaf2[Leaf Node]
+
+        Branch -.->|Hash引用| HashNode[Hash Node<br/>32 bytes]
+    end
+
+    %% 对比说明
+    subgraph Compare["Account Model vs UTXO Model"]
+        direction LR
+        AccountModel[Account Model<br/>以太坊<br/>• 全局状态树<br/>• O1余额查询<br/>• 原生合约支持]
+
+        UTXOModel[UTXO Model<br/>比特币<br/>• 未花费输出集合<br/>• On余额查询<br/>• 脚本限制]
+    end
+
+    %% 样式
+    classDef rootStyle fill:#e1f5ff,stroke:#01579b,stroke-width:3px
+    classDef accountStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef storageStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef codeStyle fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef dbStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef mptStyle fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+
+    class Root rootStyle
+    class Account1,Account2,AccountN,Balance1,Nonce1,CodeHash1,StorageRoot1,Balance2,Nonce2,CodeHash2,StorageRoot2 accountStyle
+    class StorageTrie,Slot0,Slot1,SlotN storageStyle
+    class Code codeStyle
+    class LevelDB dbStyle
+    class MPTRoot,Branch,Extension,Leaf,Leaf2,HashNode mptStyle

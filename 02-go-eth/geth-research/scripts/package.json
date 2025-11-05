@@ -1,0 +1,20 @@
+{
+  "name": "geth-research-scripts",
+  "version": "1.0.0",
+  "description": "Scripts for Geth research project",
+  "main": "deploy-contract.js",
+  "scripts": {
+    "deploy": "node deploy-contract.js",
+    "stress-test": "node stress-test.js"
+  },
+  "keywords": [
+    "ethereum",
+    "geth",
+    "blockchain"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "web3": "^4.3.0"
+  }
+}
